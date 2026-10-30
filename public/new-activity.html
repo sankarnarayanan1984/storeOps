@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New activity · StoreOps</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/auth.js"></script>
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a class="brand" href="/">StoreOps</a>
+  <a class="tab" href="/activities" aria-current="page">Activities</a>
+  <a class="tab" href="/programmes">Programmes</a>
+  <a class="tab" href="/staff">Staff</a>
+</div></nav>
+<main>
+  <a class="crumb" href="/activities">← All activities</a>
+  <header class="page"><h1>New activity</h1></header>
+
+  <div id="auth" class="auth-slot"></div>
+  <div id="error" class="notice error" hidden></div>
+
+  <form id="form" class="card" novalidate hidden>
+    <div class="grid">
+      <div class="full">
+        <label for="title">Title *</label>
+        <input id="title" name="title" maxlength="200" required placeholder="Restock dairy chiller">
+      </div>
+      <div class="full">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" maxlength="2000"></textarea>
+      </div>
+      <div>
+        <label for="category">Category *</label>
+        <select id="category" name="category" required>
+          <option value="RESTOCKING">Restocking</option>
+          <option value="PLANOGRAM">Planogram</option>
+          <option value="AUDIT">Audit</option>
+          <option value="COMPLIANCE">Compliance</option>
+          <option value="GENERAL">General</option>
+        </select>
+      </div>
+      <div>
+        <label for="priority">Priority</label>
+        <select id="priority" name="priority">
+          <option value="LOW">Low</option>
+          <option value="MEDIUM" selected>Medium</option>
+          <option value="HIGH">High</option>
+          <option value="CRITICAL">Critical</option>
+        </select>
+      </div>
+      <div>
+        <label for="storeId">Store ID</label>
+        <input id="storeId" name="storeId" placeholder="Defaults to your store">
+      </div>
+      <div>
+        <label for="regionId">Region ID</label>
+        <input id="regionId" name="regionId" placeholder="Defaults to your region">
+      </div>
+      <div>
+        <label for="programmeId">Programme</label>
+        <select id="programmeId" name="programmeId"><option value="">None</option></select>
+      </div>
+      <div>
+        <label for="assigneeId">Assignee</label>
+        <select id="assigneeId" name="assigneeId"><option value="">Unassigned</option></select>
+      </div>
+      <div>
+        <label for="dueAt">Due *</label>
+        <input id="dueAt" name="dueAt" type="datetime-local" required>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit" id="submit">Create activity</button>
+      <a class="btn secondary" href="/activities">Cancel</a>
+    </div>
+  </form>
+</main>
+<script>
+  const auth = window.StoreOpsAuth;
+  const form = document.getElementById('form');
+  const errorBox = document.getElementById('error');
+
+  function option(value, text) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    return o;
+  }
+
+  async function loadChoices(user) {
+    form.elements.storeId.value = user.storeId;
+    form.elements.regionId.value = user.regionId;
+    const [programmes, staff] = await Promise.all([
+      auth.fetch('/api/programmes').then((r) => (r.ok ? r.json() : { data: [] })),
+      fetch('/api/staff?active=true').then((r) => (r.ok ? r.json() : { data: [] })),
+    ]);
+    form.elements.programmeId.replaceChildren(option('', 'None'),
+      ...programmes.data.map((p) => option(p.id, p.name)));
+    form.elements.assigneeId.replaceChildren(option('', 'Unassigned'),
+      ...staff.data.map((s) => option(s.id, `${s.profile.firstName} ${s.profile.lastName} · ${s.storeId}`)));
+  }
+
+  auth.mount(document.getElementById('auth'));
+  auth.onChange((user) => {
+    form.hidden = !user;
+    if (user) loadChoices(user).catch(() => undefined);
+  });
+
+  function clearErrors() {
+    errorBox.hidden = true;
+    form.querySelectorAll('.field-error').forEach((el) => el.remove());
+  }
+
+  function showFieldError(name, message) {
+    const input = form.elements[name];
+    if (!input) return false;
+    const msg = document.createElement('div');
+    msg.className = 'field-error';
+    msg.textContent = message;
+    input.after(msg);
+    return true;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearErrors();
+
+    const data = Object.fromEntries([...new FormData(form)].map(([k, v]) => [k, v.trim()]).filter(([, v]) => v));
+    const missing = [...form.querySelectorAll('[required]')].filter((el) => !data[el.name]);
+    if (missing.length) {
+      missing.forEach((el) => showFieldError(el.name, 'Required'));
+      missing[0].focus();
+      return;
+    }
+    // datetime-local has no timezone; interpret it as the browser's local time.
+    data.dueAt = new Date(data.dueAt).toISOString();
+
+    const button = document.getElementById('submit');
+    button.disabled = true;
+    try {
+      const res = await auth.fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        const unplaced = (body.error?.details ?? []).filter((d) => !showFieldError(d.path, d.message));
+        errorBox.textContent = [body.error?.message, ...unplaced.map((d) => d.message)].filter(Boolean).join(' — ');
+        errorBox.hidden = false;
+        return;
+      }
+      location.href = `/activities/${encodeURIComponent(body.id)}`;
+    } catch (err) {
+      errorBox.textContent = `Could not create activity: ${err.message}`;
+      errorBox.hidden = false;
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

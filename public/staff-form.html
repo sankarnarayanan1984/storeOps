@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff · StoreOps</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a class="brand" href="/">StoreOps</a>
+  <a class="tab" href="/activities">Activities</a>
+  <a class="tab" href="/programmes">Programmes</a>
+  <a class="tab" href="/staff" aria-current="page">Staff</a>
+</div></nav>
+<main>
+  <a class="crumb" href="/staff">← All staff</a>
+  <header class="page"><h1 id="heading">Add staff</h1></header>
+
+  <div id="error" class="notice error" hidden></div>
+
+  <form id="form" class="card" novalidate hidden>
+    <div class="grid">
+      <div>
+        <label for="firstName">First name *</label>
+        <input id="firstName" name="profile.firstName" maxlength="80" required autocomplete="off">
+      </div>
+      <div>
+        <label for="lastName">Last name *</label>
+        <input id="lastName" name="profile.lastName" maxlength="80" required autocomplete="off">
+      </div>
+      <div>
+        <label for="email">Email *</label>
+        <input id="email" name="email" type="email" required autocomplete="off" placeholder="name@storeops.example">
+      </div>
+      <div>
+        <label for="phone">Phone</label>
+        <input id="phone" name="profile.phone" maxlength="30" autocomplete="off">
+      </div>
+      <div>
+        <label for="role">Role *</label>
+        <select id="role" name="role" required>
+          <option value="ASSOCIATE">Associate</option>
+          <option value="DEPARTMENT_LEAD">Department lead</option>
+          <option value="STORE_MANAGER">Store manager</option>
+          <option value="REGIONAL_MANAGER">Regional manager</option>
+        </select>
+      </div>
+      <div>
+        <label for="department">Department</label>
+        <input id="department" name="profile.department" maxlength="80" placeholder="e.g. Fresh Produce">
+      </div>
+      <div>
+        <label for="storeId">Store ID *</label>
+        <input id="storeId" name="storeId" required placeholder="store_001">
+      </div>
+      <div>
+        <label for="regionId">Region ID *</label>
+        <input id="regionId" name="regionId" required placeholder="region_south">
+      </div>
+      <div id="password-field">
+        <label for="password">Initial password *</label>
+        <input id="password" name="password" type="password" minlength="8" required autocomplete="new-password">
+        <div class="hint">At least 8 characters. The staff member signs in with their email and this password.</div>
+      </div>
+      <div id="active-field" class="full" hidden>
+        <label class="checkbox"><input id="active" name="active" type="checkbox"> Active</label>
+        <div class="hint">Inactive staff can't sign in or be assigned tasks. Deactivating someone signs them out.</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="submit" id="submit">Add staff</button>
+      <a class="btn secondary" href="/staff">Cancel</a>
+    </div>
+  </form>
+</main>
+<script>
+  // /staff/new → create; /staff/:id/edit → edit
+  const match = location.pathname.match(/^\/staff\/([^/]+)\/edit$/);
+  const editingId = match ? decodeURIComponent(match[1]) : null;
+
+  const form = document.getElementById('form');
+  const errorBox = document.getElementById('error');
+  let original = null;
+
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function clearErrors() {
+    errorBox.hidden = true;
+    form.querySelectorAll('.field-error').forEach((el) => el.remove());
+  }
+
+  function showFieldError(path, message) {
+    const input = form.elements[path];
+    if (!input) return false;
+    const msg = document.createElement('div');
+    msg.className = 'field-error';
+    msg.textContent = message;
+    (input.type === 'checkbox' ? input.closest('label') : input).after(msg);
+    return true;
+  }
+
+  /** Builds the request body from fields named like "email" or "profile.firstName". */
+  function collect() {
+    const body = { profile: {} };
+    for (const el of form.elements) {
+      if (!el.name || el.closest('[hidden]')) continue;
+      const value = el.type === 'checkbox' ? el.checked : el.value.trim();
+      const [head, tail] = el.name.split('.');
+      if (tail) body[head][tail] = value; else body[head] = value;
+    }
+    return body;
+  }
+
+  function fill(user) {
+    for (const el of form.elements) {
+      if (!el.name) continue;
+      const [head, tail] = el.name.split('.');
+      const value = tail ? user[head]?.[tail] : user[head];
+      if (el.type === 'checkbox') el.checked = Boolean(value);
+      else if (el.type !== 'password') el.value = value ?? '';
+    }
+  }
+
+  async function init() {
+    if (!editingId) {
+      form.hidden = false;
+      document.getElementById('firstName').focus();
+      return;
+    }
+    document.getElementById('heading').textContent = 'Edit staff';
+    document.getElementById('submit').textContent = 'Save changes';
+    document.getElementById('password-field').hidden = true;
+    document.getElementById('active-field').hidden = false;
+    try {
+      const res = await fetch(`/api/staff/${encodeURIComponent(editingId)}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error?.message ?? `Request failed (${res.status})`);
+      original = body;
+      const name = `${body.profile.firstName} ${body.profile.lastName}`;
+      document.getElementById('heading').textContent = `Edit ${name}`;
+      document.title = `Edit ${name} · StoreOps`;
+      fill(body);
+      form.hidden = false;
+    } catch (err) {
+      document.getElementById('heading').textContent = 'Staff member not found';
+      showError(err.message);
+    }
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearErrors();
+
+    const missing = [...form.querySelectorAll('[required]')].filter((el) => !el.closest('[hidden]') && !el.value.trim());
+    if (missing.length) {
+      missing.forEach((el) => showFieldError(el.name, 'Required'));
+      missing[0].focus();
+      return;
+    }
+
+    const button = document.getElementById('submit');
+    button.disabled = true;
+    try {
+      const res = await fetch(editingId ? `/api/staff/${encodeURIComponent(editingId)}` : '/api/staff', {
+        method: editingId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(collect()),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        const details = body.error?.details ?? [];
+        const unplaced = details.filter((d) => !showFieldError(d.path, d.message));
+        if (body.error?.code === 'EMAIL_TAKEN') showFieldError('email', body.error.message);
+        else showError([body.error?.message, ...unplaced.map((d) => `${d.path}: ${d.message}`)].filter(Boolean).join(' — '));
+        return;
+      }
+      const name = `${body.profile.firstName} ${body.profile.lastName}`;
+      try {
+        sessionStorage.setItem('staffFlash', editingId ? `Saved changes to ${name}.` : `Added ${name}.`);
+      } catch { /* storage unavailable */ }
+      location.href = '/staff';
+    } catch (err) {
+      showError(`Could not save: ${err.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  init();
+</script>
+</body>
+</html>

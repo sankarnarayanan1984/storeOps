@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Programme · StoreOps</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/auth.js"></script>
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a class="brand" href="/">StoreOps</a>
+  <a class="tab" href="/activities">Activities</a>
+  <a class="tab" href="/programmes" aria-current="page">Programmes</a>
+  <a class="tab" href="/staff">Staff</a>
+</div></nav>
+<main>
+  <a class="crumb" href="/programmes">← All programmes</a>
+  <header class="page">
+    <h1 id="title">Loading…</h1>
+    <span id="status"></span>
+  </header>
+
+  <div id="flash" class="notice success" hidden></div>
+  <div id="error" class="notice error" hidden></div>
+
+  <section class="card" id="card" hidden>
+    <dl class="details" id="details"></dl>
+  </section>
+
+  <section id="members-section" hidden>
+    <h2 class="section-title">Members</h2>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Staff role</th><th>Programme role</th><th></th></tr></thead>
+        <tbody id="members"></tbody>
+      </table>
+    </div>
+
+    <h2 class="section-title">Add member</h2>
+    <div id="auth" class="auth-slot"></div>
+    <form id="add" class="card inline-form" hidden>
+      <div>
+        <label for="staffId">Staff member</label>
+        <select id="staffId" name="staffId" required></select>
+      </div>
+      <div>
+        <label for="role">Programme role</label>
+        <select id="role" name="role">
+          <option value="STORE_MANAGER">Store manager</option>
+          <option value="DEPARTMENT_LEAD">Department lead</option>
+          <option value="ASSOCIATE">Associate</option>
+        </select>
+      </div>
+      <button class="btn" type="submit">Add member</button>
+    </form>
+  </section>
+</main>
+<script>
+  const ROLE_LABELS = {
+    REGIONAL_MANAGER: 'Regional manager', STORE_MANAGER: 'Store manager',
+    DEPARTMENT_LEAD: 'Department lead', ASSOCIATE: 'Associate',
+  };
+  const TYPE_LABELS = { SEASONAL_ROLLOUT: 'Seasonal rollout', COMPLIANCE_DRIVE: 'Compliance drive', STORE_REFIT: 'Store refit' };
+  const STATUS_LABELS = { PLANNED: 'Planned', ACTIVE: 'Active', COMPLETED: 'Completed' };
+  const auth = window.StoreOpsAuth;
+  const id = decodeURIComponent(location.pathname.split('/').pop());
+  const addForm = document.getElementById('add');
+  let programme = null;
+  let activeStaff = [];
+
+  function show(box, message) {
+    const el = document.getElementById(box);
+    el.textContent = message;
+    el.hidden = !message;
+  }
+
+  const cell = (text) => {
+    const td = document.createElement('td');
+    td.textContent = text || '—';
+    return td;
+  };
+  const option = (value, text) => Object.assign(document.createElement('option'), { value, textContent: text });
+  const formatDay = (day) => new Date(`${day}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' });
+
+  function renderDetails() {
+    document.title = `${programme.name} · StoreOps`;
+    document.getElementById('title').textContent = programme.name;
+    const badge = document.createElement('span');
+    badge.className = `badge ${programme.status}`;
+    badge.textContent = STATUS_LABELS[programme.status] ?? programme.status;
+    document.getElementById('status').replaceChildren(badge);
+
+    const dl = document.getElementById('details');
+    dl.replaceChildren();
+    for (const [label, value] of [
+      ['Type', TYPE_LABELS[programme.type] ?? programme.type],
+      ['Description', programme.description],
+      ['Dates', `${formatDay(programme.startsOn)} – ${formatDay(programme.endsOn)}`],
+      ['Enrolled stores', programme.enrolledStoreIds.join(', ')],
+    ]) {
+      dl.append(Object.assign(document.createElement('dt'), { textContent: label }),
+        Object.assign(document.createElement('dd'), { textContent: value || '—' }));
+    }
+    document.getElementById('card').hidden = false;
+  }
+
+  function renderMembers() {
+    const tbody = document.getElementById('members');
+    tbody.replaceChildren();
+    if (programme.members.length === 0) {
+      const tr = document.createElement('tr');
+      const td = cell('No members yet.');
+      td.colSpan = 5;
+      td.className = 'muted';
+      tr.append(td);
+      tbody.append(tr);
+    }
+    for (const m of programme.members) {
+      const tr = document.createElement('tr');
+      const name = m.staff ? `${m.staff.profile.firstName} ${m.staff.profile.lastName}` : `${m.staffId} (missing)`;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'linklike';
+      remove.textContent = 'Remove';
+      remove.hidden = programme.status === 'COMPLETED';
+      remove.addEventListener('click', () => removeMember(m, name));
+      const action = document.createElement('td');
+      action.append(remove);
+      tr.append(cell(name), cell(m.staff?.email), cell(ROLE_LABELS[m.staff?.role]), cell(ROLE_LABELS[m.role] ?? m.role), action);
+      tbody.append(tr);
+    }
+    document.getElementById('members-section').hidden = false;
+    renderPicker();
+  }
+
+  /** Only active staff from enrolled stores who are not already members. */
+  function renderPicker() {
+    const memberIds = new Set(programme.members.map((m) => m.staffId));
+    const eligible = activeStaff.filter((s) => programme.enrolledStoreIds.includes(s.storeId) && !memberIds.has(s.id));
+    const select = addForm.elements.staffId;
+    select.replaceChildren(...eligible.map((s) =>
+      option(s.id, `${s.profile.firstName} ${s.profile.lastName} · ${ROLE_LABELS[s.role]} · ${s.storeId}`)));
+    if (!eligible.length) select.append(option('', 'No eligible staff'));
+    preselectRole();
+  }
+
+  function preselectRole() {
+    const staff = activeStaff.find((s) => s.id === addForm.elements.staffId.value);
+    if (staff && [...addForm.elements.role.options].some((o) => o.value === staff.role)) {
+      addForm.elements.role.value = staff.role;
+    }
+  }
+
+  async function reload() {
+    const res = await fetch(`/api/programmes/${encodeURIComponent(id)}`);
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error?.message ?? `Request failed (${res.status})`);
+    programme = body;
+    renderDetails();
+    renderMembers();
+  }
+
+  async function removeMember(member, name) {
+    if (!confirm(`Remove ${name} from this programme?`)) return;
+    show('error', '');
+    const res = await auth.fetch(`/api/programmes/${encodeURIComponent(id)}/members/${encodeURIComponent(member.staffId)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json();
+      return show('error', body.error?.message ?? `Request failed (${res.status})`);
+    }
+    show('flash', `Removed ${name}.`);
+    await reload();
+  }
+
+  addForm.elements.staffId.addEventListener('change', preselectRole);
+  addForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    show('error', '');
+    show('flash', '');
+    if (!addForm.elements.staffId.value) return show('error', 'Choose a staff member.');
+    const res = await auth.fetch(`/api/programmes/${encodeURIComponent(id)}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staffId: addForm.elements.staffId.value, role: addForm.elements.role.value }),
+    });
+    const body = await res.json();
+    if (!res.ok) return show('error', body.error?.message ?? `Request failed (${res.status})`);
+    show('flash', `Added ${body.staff ? body.staff.profile.firstName : body.staffId} as ${ROLE_LABELS[body.role]}.`);
+    await reload();
+  });
+
+  auth.mount(document.getElementById('auth'));
+  auth.onChange((user) => { addForm.hidden = !user; });
+
+  (async () => {
+    try {
+      const staffRes = await fetch('/api/staff?active=true');
+      activeStaff = staffRes.ok ? (await staffRes.json()).data : [];
+      await reload();
+    } catch (err) {
+      document.getElementById('title').textContent = 'Programme not found';
+      show('error', err.message);
+    }
+  })();
+</script>
+</body>
+</html>

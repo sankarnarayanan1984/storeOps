@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Activities · StoreOps</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a class="brand" href="/">StoreOps</a>
+  <a class="tab" href="/activities" aria-current="page">Activities</a>
+  <a class="tab" href="/programmes">Programmes</a>
+  <a class="tab" href="/staff">Staff</a>
+</div></nav>
+<main>
+  <header class="page">
+    <h1>Activities</h1>
+    <a class="btn" href="/activities/new">+ New activity</a>
+  </header>
+
+  <form class="filters" id="filters">
+    <div>
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="">All</option>
+        <option value="TODO">To do</option>
+        <option value="IN_PROGRESS">In progress</option>
+        <option value="BLOCKED">Blocked</option>
+        <option value="DONE">Done</option>
+      </select>
+    </div>
+    <div>
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        <option value="">All</option>
+        <option value="RESTOCKING">Restocking</option>
+        <option value="PLANOGRAM">Planogram</option>
+        <option value="AUDIT">Audit</option>
+        <option value="COMPLIANCE">Compliance</option>
+        <option value="GENERAL">General</option>
+      </select>
+    </div>
+    <div>
+      <label for="priority">Priority</label>
+      <select id="priority" name="priority">
+        <option value="">All</option>
+        <option value="CRITICAL">Critical</option>
+        <option value="HIGH">High</option>
+        <option value="MEDIUM">Medium</option>
+        <option value="LOW">Low</option>
+      </select>
+    </div>
+    <div>
+      <label for="storeId">Store</label>
+      <input id="storeId" name="storeId" placeholder="e.g. store_001">
+    </div>
+    <button class="btn secondary" type="submit">Apply</button>
+  </form>
+
+  <div id="flash" class="notice success" hidden></div>
+  <div id="error" class="notice error" hidden></div>
+  <p id="count" class="muted"></p>
+
+  <div class="card table-wrap">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Title</th><th>Store</th><th>Status</th><th>Priority</th><th>Category</th><th>Due</th></tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+<script>
+  const STATUS_LABELS = { TODO: 'To do', IN_PROGRESS: 'In progress', BLOCKED: 'Blocked', DONE: 'Done' };
+  const rows = document.getElementById('rows');
+  const form = document.getElementById('filters');
+
+  const cell = (text, className) => {
+    const td = document.createElement('td');
+    if (className) td.className = className;
+    td.textContent = text ?? '—';
+    return td;
+  };
+  const formatDate = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+  function render(items) {
+    rows.replaceChildren();
+    document.getElementById('count').textContent = `${items.length} ${items.length === 1 ? 'activity' : 'activities'}`;
+    if (items.length === 0) {
+      const tr = document.createElement('tr');
+      tr.append(cell('No activities match these filters.', 'muted'));
+      tr.firstChild.colSpan = 7;
+      rows.append(tr);
+      return;
+    }
+    for (const item of items) {
+      const tr = document.createElement('tr');
+
+      const idCell = document.createElement('td');
+      const link = document.createElement('a');
+      link.href = `/activities/${encodeURIComponent(item.id)}`;
+      link.className = 'mono id-link';
+      link.title = item.id;
+      link.textContent = item.id;
+      idCell.append(link);
+
+      const statusCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = `badge ${item.status}`;
+      badge.textContent = STATUS_LABELS[item.status] ?? item.status;
+      statusCell.append(badge);
+
+      tr.append(idCell, cell(item.title, 'title'), cell(item.storeId), statusCell,
+        cell(item.priority), cell(item.category), cell(formatDate(item.dueAt)));
+      rows.append(tr);
+    }
+  }
+
+  async function load() {
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(form)) if (value.trim()) params.set(key, value.trim());
+    history.replaceState(null, '', params.size ? `?${params}` : location.pathname);
+
+    const errorBox = document.getElementById('error');
+    errorBox.hidden = true;
+    try {
+      const res = await fetch(`/api/activities?${params}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error?.message ?? `Request failed (${res.status})`);
+      render(body.data);
+    } catch (err) {
+      errorBox.textContent = `Could not load activities: ${err.message}`;
+      errorBox.hidden = false;
+      rows.replaceChildren();
+    }
+  }
+
+  try {
+    const flash = sessionStorage.getItem('activityFlash');
+    if (flash) {
+      sessionStorage.removeItem('activityFlash');
+      const box = document.getElementById('flash');
+      box.textContent = flash;
+      box.hidden = false;
+    }
+  } catch { /* storage unavailable */ }
+
+  for (const [key, value] of new URLSearchParams(location.search)) {
+    if (form.elements[key]) form.elements[key].value = value;
+  }
+  form.addEventListener('submit', (e) => { e.preventDefault(); load(); });
+  form.querySelectorAll('select').forEach((s) => s.addEventListener('change', load));
+  load();
+</script>
+</body>
+</html>

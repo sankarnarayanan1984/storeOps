@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff · StoreOps</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a class="brand" href="/">StoreOps</a>
+  <a class="tab" href="/activities">Activities</a>
+  <a class="tab" href="/programmes">Programmes</a>
+  <a class="tab" href="/staff" aria-current="page">Staff</a>
+</div></nav>
+<main>
+  <header class="page">
+    <h1>Staff</h1>
+    <a class="btn" href="/staff/new">+ Add staff</a>
+  </header>
+
+  <form class="filters" id="filters">
+    <div>
+      <label for="role">Role</label>
+      <select id="role" name="role">
+        <option value="">All</option>
+        <option value="REGIONAL_MANAGER">Regional manager</option>
+        <option value="STORE_MANAGER">Store manager</option>
+        <option value="DEPARTMENT_LEAD">Department lead</option>
+        <option value="ASSOCIATE">Associate</option>
+      </select>
+    </div>
+    <div>
+      <label for="active">Status</label>
+      <select id="active" name="active">
+        <option value="">All</option>
+        <option value="true">Active</option>
+        <option value="false">Inactive</option>
+      </select>
+    </div>
+    <div>
+      <label for="storeId">Store</label>
+      <input id="storeId" name="storeId" placeholder="e.g. store_001">
+    </div>
+    <button class="btn secondary" type="submit">Apply</button>
+  </form>
+
+  <div id="flash" class="notice success" hidden></div>
+  <div id="error" class="notice error" hidden></div>
+  <p id="count" class="muted"></p>
+
+  <div class="card table-wrap">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Email</th><th>Role</th><th>Store</th><th>Region</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+<script>
+  const ROLE_LABELS = {
+    REGIONAL_MANAGER: 'Regional manager', STORE_MANAGER: 'Store manager',
+    DEPARTMENT_LEAD: 'Department lead', ASSOCIATE: 'Associate',
+  };
+  const rows = document.getElementById('rows');
+  const form = document.getElementById('filters');
+
+  const cell = (text, className) => {
+    const td = document.createElement('td');
+    if (className) td.className = className;
+    td.textContent = text || '—';
+    return td;
+  };
+  const link = (href, text, className) => {
+    const a = document.createElement('a');
+    a.href = href;
+    a.textContent = text;
+    if (className) a.className = className;
+    return a;
+  };
+
+  function render(items) {
+    rows.replaceChildren();
+    document.getElementById('count').textContent = `${items.length} ${items.length === 1 ? 'person' : 'people'}`;
+    if (items.length === 0) {
+      const tr = document.createElement('tr');
+      tr.append(cell('No staff match these filters.', 'muted'));
+      tr.firstChild.colSpan = 7;
+      rows.append(tr);
+      return;
+    }
+    for (const user of items) {
+      const editHref = `/staff/${encodeURIComponent(user.id)}/edit`;
+      const tr = document.createElement('tr');
+
+      const nameCell = document.createElement('td');
+      nameCell.append(link(editHref, `${user.profile.firstName} ${user.profile.lastName}`));
+      if (user.profile.department) {
+        const dept = document.createElement('div');
+        dept.className = 'hint';
+        dept.textContent = user.profile.department;
+        nameCell.append(dept);
+      }
+
+      const statusCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = `badge ${user.active ? 'active' : 'inactive'}`;
+      badge.textContent = user.active ? 'Active' : 'Inactive';
+      statusCell.append(badge);
+
+      const actionCell = document.createElement('td');
+      actionCell.append(link(editHref, 'Edit'));
+
+      tr.append(nameCell, cell(user.email), cell(ROLE_LABELS[user.role] ?? user.role),
+        cell(user.storeId, 'mono'), cell(user.regionId, 'mono'), statusCell, actionCell);
+      rows.append(tr);
+    }
+  }
+
+  async function load() {
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(form)) if (value.trim()) params.set(key, value.trim());
+    history.replaceState(null, '', params.size ? `?${params}` : location.pathname);
+
+    const errorBox = document.getElementById('error');
+    errorBox.hidden = true;
+    try {
+      const res = await fetch(`/api/staff?${params}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error?.message ?? `Request failed (${res.status})`);
+      render(body.data);
+    } catch (err) {
+      errorBox.textContent = `Could not load staff: ${err.message}`;
+      errorBox.hidden = false;
+      rows.replaceChildren();
+    }
+  }
+
+  // Confirmation passed from the add/edit page.
+  try {
+    const flash = sessionStorage.getItem('staffFlash');
+    if (flash) {
+      sessionStorage.removeItem('staffFlash');
+      const box = document.getElementById('flash');
+      box.textContent = flash;
+      box.hidden = false;
+    }
+  } catch { /* storage unavailable */ }
+
+  for (const [key, value] of new URLSearchParams(location.search)) {
+    if (form.elements[key]) form.elements[key].value = value;
+  }
+  form.addEventListener('submit', (e) => { e.preventDefault(); load(); });
+  form.querySelectorAll('select').forEach((s) => s.addEventListener('change', load));
+  load();
+</script>
+</body>
+</html>

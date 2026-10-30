@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Programmes · StoreOps</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/auth.js"></script>
+</head>
+<body>
+<nav class="topnav"><div class="inner">
+  <a class="brand" href="/">StoreOps</a>
+  <a class="tab" href="/activities">Activities</a>
+  <a class="tab" href="/programmes" aria-current="page">Programmes</a>
+  <a class="tab" href="/staff">Staff</a>
+</div></nav>
+<main>
+  <header class="page">
+    <h1>Programmes</h1>
+    <button class="btn" type="button" id="toggle-new" hidden>+ New programme</button>
+  </header>
+
+  <div id="auth" class="auth-slot"></div>
+  <div id="flash" class="notice success" hidden></div>
+  <div id="error" class="notice error" hidden></div>
+
+  <form id="new" class="card" novalidate hidden>
+    <div class="grid">
+      <div class="full">
+        <label for="name">Name *</label>
+        <input id="name" name="name" maxlength="120" required placeholder="Winter range rollout">
+      </div>
+      <div class="full">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" maxlength="2000"></textarea>
+      </div>
+      <div>
+        <label for="type">Type *</label>
+        <select id="type" name="type" required>
+          <option value="SEASONAL_ROLLOUT">Seasonal rollout</option>
+          <option value="COMPLIANCE_DRIVE">Compliance drive</option>
+          <option value="STORE_REFIT">Store refit</option>
+        </select>
+      </div>
+      <div></div>
+      <div>
+        <label for="startsOn">Starts on *</label>
+        <input id="startsOn" name="startsOn" type="date" required>
+      </div>
+      <div>
+        <label for="endsOn">Ends on *</label>
+        <input id="endsOn" name="endsOn" type="date" required>
+      </div>
+    </div>
+    <p class="hint">Your store is enrolled automatically.</p>
+    <div class="actions">
+      <button class="btn" type="submit">Create programme</button>
+      <button class="btn secondary" type="button" id="cancel-new">Cancel</button>
+    </div>
+  </form>
+
+  <section id="list" hidden>
+    <form class="filters" id="filters">
+      <div>
+        <label for="f-type">Type</label>
+        <select id="f-type" name="type">
+          <option value="">All</option>
+          <option value="SEASONAL_ROLLOUT">Seasonal rollout</option>
+          <option value="COMPLIANCE_DRIVE">Compliance drive</option>
+          <option value="STORE_REFIT">Store refit</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-status">Status</label>
+        <select id="f-status" name="status">
+          <option value="">All</option>
+          <option value="PLANNED">Planned</option>
+          <option value="ACTIVE">Active</option>
+          <option value="COMPLETED">Completed</option>
+        </select>
+      </div>
+    </form>
+    <p id="count" class="muted"></p>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Type</th><th>Status</th><th>Dates</th><th>Members</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script>
+  const TYPE_LABELS = { SEASONAL_ROLLOUT: 'Seasonal rollout', COMPLIANCE_DRIVE: 'Compliance drive', STORE_REFIT: 'Store refit' };
+  const STATUS_LABELS = { PLANNED: 'Planned', ACTIVE: 'Active', COMPLETED: 'Completed' };
+  const CAN_CREATE = ['STORE_MANAGER', 'REGIONAL_MANAGER'];
+  const auth = window.StoreOpsAuth;
+  const rows = document.getElementById('rows');
+  const filters = document.getElementById('filters');
+  const newForm = document.getElementById('new');
+  const toggle = document.getElementById('toggle-new');
+
+  function show(box, message) {
+    const el = document.getElementById(box);
+    el.textContent = message;
+    el.hidden = !message;
+  }
+
+  const cell = (text, className) => {
+    const td = document.createElement('td');
+    if (className) td.className = className;
+    td.textContent = text ?? '—';
+    return td;
+  };
+  const formatDay = (day) => new Date(`${day}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' });
+
+  function render(items) {
+    rows.replaceChildren();
+    document.getElementById('count').textContent = `${items.length} ${items.length === 1 ? 'programme' : 'programmes'} for ${auth.user.storeId}`;
+    if (items.length === 0) {
+      const tr = document.createElement('tr');
+      tr.append(cell('No programmes match these filters.', 'muted'));
+      tr.firstChild.colSpan = 5;
+      rows.append(tr);
+      return;
+    }
+    for (const p of items) {
+      const tr = document.createElement('tr');
+      const nameCell = document.createElement('td');
+      nameCell.className = 'title';
+      const link = document.createElement('a');
+      link.href = `/programmes/${encodeURIComponent(p.id)}`;
+      link.textContent = p.name;
+      nameCell.append(link);
+
+      const statusCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = `badge ${p.status}`;
+      badge.textContent = STATUS_LABELS[p.status] ?? p.status;
+      statusCell.append(badge);
+
+      const members = p.storeMemberCount === p.memberCount
+        ? `${p.memberCount}`
+        : `${p.memberCount} (${p.storeMemberCount} from your store)`;
+      tr.append(nameCell, cell(TYPE_LABELS[p.type] ?? p.type), statusCell,
+        cell(`${formatDay(p.startsOn)} – ${formatDay(p.endsOn)}`), cell(members));
+      rows.append(tr);
+    }
+  }
+
+  async function load() {
+    if (!auth.user) return;
+    show('error', '');
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(filters)) if (value) params.set(key, value);
+    try {
+      const res = await auth.fetch(`/api/programmes?${params}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error?.message ?? `Request failed (${res.status})`);
+      render(body.data);
+    } catch (err) {
+      show('error', `Could not load programmes: ${err.message}`);
+    }
+  }
+
+  toggle.addEventListener('click', () => { newForm.hidden = false; newForm.elements.name.focus(); });
+  document.getElementById('cancel-new').addEventListener('click', () => { newForm.hidden = true; });
+
+  newForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    show('error', '');
+    newForm.querySelectorAll('.field-error').forEach((el) => el.remove());
+    const data = Object.fromEntries([...new FormData(newForm)].map(([k, v]) => [k, v.trim()]));
+    try {
+      const res = await auth.fetch('/api/programmes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        for (const d of body.error?.details ?? []) {
+          const input = newForm.elements[d.path];
+          if (!input) continue;
+          const msg = document.createElement('div');
+          msg.className = 'field-error';
+          msg.textContent = d.message;
+          input.after(msg);
+        }
+        throw new Error(body.error?.message ?? `Request failed (${res.status})`);
+      }
+      newForm.reset();
+      newForm.hidden = true;
+      show('flash', `Created "${body.name}".`);
+      load();
+    } catch (err) {
+      show('error', err.message);
+    }
+  });
+
+  filters.querySelectorAll('select').forEach((s) => s.addEventListener('change', load));
+
+  auth.mount(document.getElementById('auth'));
+  auth.onChange((user) => {
+    document.getElementById('list').hidden = !user;
+    toggle.hidden = !user || !CAN_CREATE.includes(user.role);
+    if (!user) newForm.hidden = true;
+    load();
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+
+# Harness working files (brief §7): gitignored during a run; reviews are committed.
+.harness/output/*
+!.harness/output/.gitkeep
