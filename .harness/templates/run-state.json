@@ -1,0 +1,12 @@
+{
+  "runId": "<run-id>",
+  "feature": "<one line>",
+  "status": "AWAITING_APPROVAL | IN_PROGRESS | ESCALATED | COMPLETE | ABORTED",
+  "baseRef": "<git commit sha at approval>",
+  "maxIterations": 3,
+  "currentSprint": 1,
+  "sprints": [
+    { "id": 1, "title": "<title>", "status": "PENDING | IN_PROGRESS | PASSED | ACCEPTED_CONDITIONAL | ESCALATED", "iterations": 0, "verdicts": [] }
+  ],
+  "evaluatorRetries": 0
+}

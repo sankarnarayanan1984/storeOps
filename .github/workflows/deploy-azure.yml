@@ -1,0 +1,44 @@
+# Manual deployment to Azure Container Apps (infra/azure/deploy.sh).
+# Uses GitHub OIDC — no Azure passwords stored in GitHub. Required repository secrets:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID  (an app registration with a
+#   federated credential for this repo and Owner, or Contributor + User Access Administrator,
+#   on the target subscription or resource group).
+name: deploy-azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: Resource group
+        default: rg-storeops
+      location:
+        description: Azure region
+        default: eastus
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: azure
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # Same gate as CI: never deploy a build that fails the checks.
+      - run: npm ci
+      - run: npm run check
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - run: infra/azure/deploy.sh
+        env:
+          AZ_RESOURCE_GROUP: ${{ inputs.resource_group }}
+          AZ_LOCATION: ${{ inputs.location }}
+          IMAGE_TAG: ${{ github.sha }}

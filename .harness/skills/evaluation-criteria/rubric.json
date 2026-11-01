@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "description": "StoreOps evaluation rubric. Single source of truth for compute-verdict.mjs. Edit only via a reviewed change; it is a protected file during harness runs.",
+  "verdictRules": {
+    "passScore": 90,
+    "conditionalScore": 75,
+    "minDimensionRatio": 0.5,
+    "missingResult": "FAIL",
+    "order": [
+      "Any hard-gate check FAIL -> FAIL",
+      "Any dimension below minDimensionRatio of its weight -> FAIL",
+      "score >= passScore -> PASS",
+      "score >= conditionalScore -> CONDITIONAL PASS",
+      "otherwise -> FAIL"
+    ]
+  },
+  "dimensions": [
+    {
+      "id": "A",
+      "name": "Architecture compliance",
+      "weight": 40,
+      "checks": [
+        { "id": "A1", "type": "automated", "hardGate": true, "failureMode": 1, "title": "dependency-cruiser: 0 violations (no cross-module repository/service imports, reports read-only, no cycles)" },
+        { "id": "A2", "type": "automated", "hardGate": true, "failureMode": 2, "title": "eslint: 0 errors (includes no raw Error throws and module import restrictions)" },
+        { "id": "A3", "type": "automated", "hardGate": true, "failureMode": null, "title": "tsc --noEmit: 0 type errors" },
+        { "id": "A4", "type": "llm", "hardGate": true, "failureMode": 4, "title": "Every cross-module side effect is raised with events.publish(<event in domainEvents.ts>); no state written to another module" },
+        { "id": "A5", "type": "llm", "hardGate": true, "failureMode": null, "title": "Layer separation: routes only validate + call service; business rules in service; repositories only store data" },
+        { "id": "A6", "type": "llm", "hardGate": false, "failureMode": 2, "title": "Each new failure path throws the specific AppError subclass and code named in the contract" }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Behaviour and test evidence",
+      "weight": 35,
+      "checks": [
+        { "id": "B1", "type": "automated", "hardGate": true, "failureMode": null, "title": "jest: all tests pass" },
+        { "id": "B2", "type": "automated", "hardGate": true, "failureMode": 3, "title": "Coverage thresholds met (services 80%, routes 70%, shared 60%, overall 70% lines)" },
+        { "id": "B3", "type": "llm", "hardGate": true, "failureMode": 3, "title": "Every acceptance criterion has a test asserting the business outcome (body/state/event), not only the HTTP status" },
+        { "id": "B4", "type": "llm", "hardGate": false, "failureMode": 3, "title": "Every error-path AC is tested with an assertion on error.code" },
+        { "id": "B5", "type": "llm", "hardGate": false, "failureMode": 4, "title": "Every event published in this sprint is asserted by a test (captured bus or downstream effect)" }
+      ]
+    },
+    {
+      "id": "C",
+      "name": "Contract fidelity and hygiene",
+      "weight": 25,
+      "checks": [
+        { "id": "C1", "type": "automated", "hardGate": true, "failureMode": null, "title": "Protected files unchanged (quality gates, rubric, skills, agents, CLAUDE.md, architecture test)" },
+        { "id": "C2", "type": "llm", "hardGate": false, "failureMode": null, "title": "generator-summary AC table lists every contract AC and every MET claim is verified" },
+        { "id": "C3", "type": "llm", "hardGate": false, "failureMode": null, "title": "Changed files stay within the contract's scope" },
+        { "id": "C4", "type": "llm", "hardGate": false, "failureMode": null, "title": "README endpoint and event tables updated for new endpoints/events" },
+        { "id": "C5", "type": "automated", "hardGate": false, "failureMode": null, "title": "No console.log in src (except server.ts) and no .only/.skip in tests" }
+      ]
+    }
+  ],
+  "protectedPaths": [
+    "CLAUDE.md",
+    ".harness/agents/",
+    ".harness/skills/",
+    ".harness/scripts/",
+    ".harness/templates/",
+    ".claude/agents/",
+    "eslint.config.mjs",
+    "jest.config.js",
+    ".dependency-cruiser.cjs",
+    "tsconfig.json",
+    "tsconfig.build.json",
+    "package.json",
+    "tests/architecture.test.ts",
+    ".github/"
+  ]
+}

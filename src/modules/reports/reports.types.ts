@@ -6,6 +6,10 @@ export interface MetricCounters {
   activitiesCompleted: number;
   activitiesBlocked: number;
   programmesEnrolled: number;
+  /** Shift handover batches touching the scope (a region counts a batch once). */
+  handoversCompleted: number;
+  handoverTasksClosed: number;
+  handoverTasksBlocked: number;
 }
 
 export type MetricField = keyof MetricCounters;

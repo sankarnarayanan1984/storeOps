@@ -94,6 +94,11 @@ export default tseslint.config(
     languageOptions: { sourceType: 'script', globals: globals.browser },
   },
   {
+    // Harness scripts run under Node.
+    files: ['.harness/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     files: ['jest.config.js', '.dependency-cruiser.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { module: 'writable' } },
   },

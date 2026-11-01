@@ -22,6 +22,9 @@ describe('Reports API', () => {
       activitiesCompleted: 0,
       activitiesBlocked: 0,
       programmesEnrolled: 0,
+      handoversCompleted: 0,
+      handoverTasksClosed: 0,
+      handoverTasksBlocked: 0,
       completionRate: 0,
     });
   });

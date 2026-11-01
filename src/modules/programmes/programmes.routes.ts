@@ -46,6 +46,10 @@ export function createProgrammesRouter(service: ProgrammesService, authenticate:
     res.status(201).json(await service.addMember(req.params.id, staffId, role, currentUser(res)));
   });
 
+  router.get<{ id: string }>('/:id/handovers', auth, async (req, res) => {
+    res.json({ data: await service.listHandovers(req.params.id, currentUser(res)) });
+  });
+
   // Open endpoints.
   router.get('/:id', async (req, res) => {
     res.json(await service.getById(req.params.id));

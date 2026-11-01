@@ -17,7 +17,11 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "check": "npm run typecheck && npm run lint && npm run depcheck && npm run test:coverage",
-    "depcheck": "depcruise src --config .dependency-cruiser.cjs"
+    "depcheck": "depcruise src --config .dependency-cruiser.cjs",
+    "docker:build": "docker build -t storeops-api:local .",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "deploy:azure": "bash infra/azure/deploy.sh"
   },
   "dependencies": {
     "express": "^5.3.0",

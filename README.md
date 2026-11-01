@@ -3,11 +3,14 @@
 REST API for retail store operations management — the reference codebase for the capstone in
 [docs/capstone-brief.md](docs/capstone-brief.md). TypeScript (strict), Express 5, zod, in-memory storage with mock data.
 
+> **Capstone reference codebase — do not use in production.** Data and sessions live in memory and reset on restart; demo accounts share a published password.
+
 ```bash
 npm install
 npm run dev          # http://localhost:3000 (PORT to override), reloads on change
 npm run check        # tsc --noEmit + eslint + dependency-cruiser + jest --coverage (all must pass)
-docker compose up    # build and run the container on :3000
+docker compose up --build   # build and run the container on :3000 (see DEPLOYMENT.md)
+npm run deploy:azure        # deploy to Azure Container Apps (needs az login; see DEPLOYMENT.md)
 ```
 
 UI pages: `/activities`, `/programmes`, `/staff`. Every seeded account's password is `StoreOps@123`
@@ -46,7 +49,10 @@ UI pages: `/activities`, `/programmes`, `/staff`. Every seeded account's passwor
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/tasks` | Alias of `/api/activities` (deployment smoke check) |
+| PATCH | `/api/activities/bulk-status` 🔒 | Shift handover: `{ ids (1–50, unique), status: DONE \| BLOCKED, note? }`; per-id results (`UPDATED` / `FAILED` with `NOT_FOUND`, `FORBIDDEN`, `INVALID_STATUS_TRANSITION`) + summary; own store (REGIONAL_MANAGER: own region); audits each update; emits `activity.status_changed` per update and one `activity.handover_completed` |
+| GET | `/api/activities/:id/audit` 🔒 | Bulk-status audit trail (batch id, from/to, actor id and name, note), oldest first |
 | GET | `/api/programmes/:id`, `/api/programmes/:id/members` | Members joined to staff records |
+| GET | `/api/programmes/:id/handovers` 🔒 | Shift handover history of the programme (batch id, store, closed/blocked counts, activity ids, completed by, note), oldest first; 404 `NOT_FOUND` if unknown or the caller's store is not enrolled |
 | PATCH / DELETE | `/api/programmes/:id/members/:staffId` | Change role / remove (emits `programme.member_removed`) |
 | POST | `/api/programmes/:id/enrolments` | Enrol a store; emits `programme.store_enrolled` |
 | POST | `/api/alerts/:id/read` 🔒 | Mark own notification read |
@@ -54,7 +60,7 @@ UI pages: `/activities`, `/programmes`, `/staff`. Every seeded account's passwor
 | POST / PATCH | `/api/staff`, `/api/staff/:id` | Register / edit staff |
 | POST | `/api/staff/auth/login`, `/api/staff/auth/logout` 🔒 | Bearer tokens, 8-hour expiry |
 | GET / PATCH | `/api/staff/me` 🔒 | Own profile; `POST /api/staff/me/password` changes password |
-| GET | `/api/reports/metrics/:scope/:id` | `scope` is `store` or `region`; built from events |
+| GET | `/api/reports/metrics/:scope/:id` | `scope` is `store` or `region`; built from events; includes `handoversCompleted`, `handoverTasksClosed`, `handoverTasksBlocked` (from `activity.handover_completed`; a region counts a batch once) |
 
 Errors always have the shape `{ "error": { "code", "message", "details?" } }`.
 
@@ -65,6 +71,7 @@ Errors always have the shape `{ "error": { "code", "message", "details?" } }`.
 | `activity.created` | activities | reports |
 | `activity.status_changed` | activities | reports; alerts (BLOCKED → INVENTORY for restocking, else ESCALATION, to the store's managers) |
 | `activity.deleted` | activities | reports |
+| `activity.handover_completed` | activities (`PATCH /api/activities/bulk-status`, once per request with ≥1 update) | alerts (one SHIFT_HANDOVER summary per store in the batch, to that store's managers, with the store's closed/blocked counts); reports (handover counters per store and per distinct region); programmes (appends a handover record to each known programme in `programmes[]`; unknown ids skipped) |
 | `programme.created`, `programme.store_enrolled` | programmes | reports |
 | `programme.member_added`, `programme.member_removed` | programmes | — (available for future subscribers) |
 
@@ -100,3 +107,7 @@ public/                   static UI pages (+ auth.js sign-in helper)
 | No circular imports | dependency-cruiser, `tests/architecture.test.ts` |
 
 Coverage thresholds (`jest.config.js`): services 80%, routes 70%, shared 60%, overall 70% lines.
+
+## Development harness
+
+Feature work is governed by a Planner → Generator ⇄ Evaluator → Monitor harness driven by `CLAUDE.md`. Start a run with `@planner <feature>` (see `PROMPT.md`), review `.harness/output/spec.md`, type `APPROVED`. Agents, skills, rubric and scripts live in `.harness/`; every sprint decision is archived in `.harness/reviews/`. Design rationale: `DESIGN_BRIEF.md`.

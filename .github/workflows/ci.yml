@@ -1,0 +1,21 @@
+# Authoritative merge gate. Runs the same checks as the harness Evaluator's automated hard gates
+# (see CLAUDE.md §8), for every PR whether or not it was produced by the harness.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run check   # tsc --noEmit, eslint, dependency-cruiser, jest --coverage (thresholds)
+      - run: npm run build

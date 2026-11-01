@@ -1,6 +1,7 @@
 import type {
   ActivityCreatedEvent,
   ActivityDeletedEvent,
+  ActivityHandoverCompletedEvent,
   ActivityStatusChangedEvent,
   ProgrammeCreatedEvent,
   ProgrammeStoreEnrolledEvent,
@@ -38,6 +39,31 @@ export class ReportsService {
   async recordEnrolment(event: ProgrammeStoreEnrolledEvent | ProgrammeCreatedEvent): Promise<void> {
     // Programme events carry no region, so this metric is store-scoped only.
     await this.repository.increment('store', event.storeId, 'programmesEnrolled');
+  }
+
+  /**
+   * Handover counters only; activity counters stay driven by `activity.status_changed`
+   * so a handover is never double counted. Each region counts a batch once.
+   */
+  async recordHandover(event: ActivityHandoverCompletedEvent): Promise<void> {
+    const regions = new Map<string, { closed: number; blocked: number }>();
+    for (const group of event.stores) {
+      await this.addHandover('store', group.storeId, group.closedCount, group.blockedCount);
+      const region = regions.get(group.regionId) ?? { closed: 0, blocked: 0 };
+      regions.set(group.regionId, {
+        closed: region.closed + group.closedCount,
+        blocked: region.blocked + group.blockedCount,
+      });
+    }
+    for (const [regionId, totals] of regions) {
+      await this.addHandover('region', regionId, totals.closed, totals.blocked);
+    }
+  }
+
+  private async addHandover(scope: MetricScope, id: string, closed: number, blocked: number): Promise<void> {
+    await this.repository.increment(scope, id, 'handoversCompleted', 1);
+    await this.repository.increment(scope, id, 'handoverTasksClosed', closed);
+    await this.repository.increment(scope, id, 'handoverTasksBlocked', blocked);
   }
 
   private async bump(

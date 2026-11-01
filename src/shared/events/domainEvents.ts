@@ -44,6 +44,37 @@ export interface ActivityDeletedEvent {
   occurredAt: string;
 }
 
+/** Per-store slice of a shift handover batch. */
+export interface HandoverStoreGroup {
+  storeId: string;
+  regionId: string;
+  closedCount: number;
+  blockedCount: number;
+  activityIds: string[];
+}
+
+/** Per-programme slice of a shift handover batch (grouped by programmeId + storeId). */
+export interface HandoverProgrammeGroup {
+  programmeId: string;
+  storeId: string;
+  closedCount: number;
+  blockedCount: number;
+  activityIds: string[];
+}
+
+/** One per bulk-status request that updated at least one activity. */
+export interface ActivityHandoverCompletedEvent {
+  batchId: string;
+  completedBy: string;
+  completedByName: string;
+  note?: string;
+  closedCount: number;
+  blockedCount: number;
+  stores: HandoverStoreGroup[];
+  programmes: HandoverProgrammeGroup[];
+  occurredAt: string;
+}
+
 export interface ProgrammeCreatedEvent {
   programmeId: string;
   programmeName: string;
@@ -72,6 +103,7 @@ export interface DomainEvents {
   'activity.created': ActivityCreatedEvent;
   'activity.status_changed': ActivityStatusChangedEvent;
   'activity.deleted': ActivityDeletedEvent;
+  'activity.handover_completed': ActivityHandoverCompletedEvent;
   'programme.created': ProgrammeCreatedEvent;
   'programme.store_enrolled': ProgrammeStoreEnrolledEvent;
   'programme.member_added': ProgrammeMemberEvent;

@@ -1,10 +1,15 @@
+# Only package.json, package-lock.json, tsconfig*.json, src/ and public/ are needed in the image.
 node_modules
 dist
 coverage
 tests
 docs
 prompts
+infra
 .harness
+.claude
+.github
+*.md
 *.log
 .env
 .git

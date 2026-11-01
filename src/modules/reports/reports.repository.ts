@@ -10,6 +10,9 @@ const emptyCounters = (): MetricCounters => ({
   activitiesCompleted: 0,
   activitiesBlocked: 0,
   programmesEnrolled: 0,
+  handoversCompleted: 0,
+  handoverTasksClosed: 0,
+  handoverTasksBlocked: 0,
 });
 
 /** Read model built from domain events; reports never queries other modules. */

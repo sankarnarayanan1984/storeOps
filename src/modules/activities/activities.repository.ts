@@ -1,4 +1,4 @@
-import type { Task, TaskFilter } from './activities.types';
+import type { Task, TaskAuditEntry, TaskFilter } from './activities.types';
 
 export interface ActivitiesRepository {
   list(filter: TaskFilter): Promise<Task[]>;
@@ -39,5 +39,24 @@ export class InMemoryActivitiesRepository implements ActivitiesRepository {
   delete(id: string): Promise<void> {
     this.items.delete(id);
     return Promise.resolve();
+  }
+}
+
+export interface ActivityAuditRepository {
+  append(entry: TaskAuditEntry): Promise<TaskAuditEntry>;
+  /** Entries for one activity, oldest first. */
+  listByActivity(activityId: string): Promise<TaskAuditEntry[]>;
+}
+
+export class InMemoryActivityAuditRepository implements ActivityAuditRepository {
+  private readonly entries: TaskAuditEntry[] = [];
+
+  append(entry: TaskAuditEntry): Promise<TaskAuditEntry> {
+    this.entries.push({ ...entry });
+    return Promise.resolve({ ...entry });
+  }
+
+  listByActivity(activityId: string): Promise<TaskAuditEntry[]> {
+    return Promise.resolve(this.entries.filter((e) => e.activityId === activityId).map((e) => ({ ...e })));
   }
 }

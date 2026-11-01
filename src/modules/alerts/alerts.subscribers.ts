@@ -18,4 +18,22 @@ export function registerAlertSubscribers(bus: EventBus, service: AlertsService):
       entityId: event.activityId,
     });
   });
+
+  // A shift handover is summarised once per store, so each manager sees only
+  // the counts for their own store rather than the whole (possibly regional) batch.
+  bus.subscribe('activity.handover_completed', async (event) => {
+    await Promise.all(
+      event.stores.map((store) =>
+        service.notifyStore({
+          type: 'SHIFT_HANDOVER',
+          storeId: store.storeId,
+          recipientRoles: ['STORE_MANAGER'],
+          title: 'Shift handover',
+          message: `Shift handover by ${event.completedByName}: ${store.closedCount} closed, ${store.blockedCount} blocked`,
+          sourceEvent: 'activity.handover_completed',
+          entityId: event.batchId,
+        }),
+      ),
+    );
+  });
 }

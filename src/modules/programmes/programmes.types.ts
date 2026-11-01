@@ -59,3 +59,17 @@ export interface ProjectFilter {
   status?: ProjectStatus;
   staffId?: string;
 }
+
+/** One programme's slice of a shift handover batch, recorded from `activity.handover_completed`. */
+export interface ProgrammeHandover {
+  batchId: string;
+  programmeId: string;
+  storeId: string;
+  closedCount: number;
+  blockedCount: number;
+  activityIds: string[];
+  completedBy: string;
+  completedByName: string;
+  note?: string;
+  occurredAt: string;
+}

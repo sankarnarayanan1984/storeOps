@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { currentUser, requireAuth, type Authenticate } from '../../shared/http/auth';
 import { parse } from '../../shared/http/validate';
 import type { ActivitiesService } from './activities.service';
-import { TASK_CATEGORIES, TASK_PRIORITIES, TASK_STATUSES } from './activities.types';
+import { BULK_STATUSES, TASK_CATEGORIES, TASK_PRIORITIES, TASK_STATUSES } from './activities.types';
 
 const listQuery = z.object({
   programmeId: z.string().min(1).optional(),
@@ -37,6 +37,16 @@ const updateBody = z
     message: 'Provide at least one of status, priority, category or assigneeId',
   });
 
+const bulkStatusBody = z.object({
+  ids: z
+    .array(z.string().trim().min(1))
+    .min(1)
+    .max(50)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'ids must not contain duplicates' }),
+  status: z.enum(BULK_STATUSES),
+  note: z.string().trim().min(1).max(500).optional(),
+});
+
 export function createActivitiesRouter(service: ActivitiesService, authenticate: Authenticate): Router {
   const router = Router();
   const auth = requireAuth(authenticate);
@@ -45,12 +55,21 @@ export function createActivitiesRouter(service: ActivitiesService, authenticate:
     res.json({ data: await service.list(parse(listQuery, req.query)) });
   });
 
+  router.get<{ id: string }>('/:id/audit', auth, async (req, res) => {
+    res.json({ data: await service.listAudit(req.params.id) });
+  });
+
   router.get('/:id', async (req, res) => {
     res.json(await service.getById(req.params.id));
   });
 
   router.post('/', auth, async (req, res) => {
     res.status(201).json(await service.create(parse(createBody, req.body), currentUser(res)));
+  });
+
+  // Static path first, or 'bulk-status' would be captured as an :id.
+  router.patch('/bulk-status', auth, async (req, res) => {
+    res.json(await service.bulkUpdateStatus(parse(bulkStatusBody, req.body), currentUser(res)));
   });
 
   router.patch<{ id: string }>('/:id', auth, async (req, res) => {

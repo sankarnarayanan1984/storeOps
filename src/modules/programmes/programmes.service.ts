@@ -1,4 +1,5 @@
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors';
+import type { ActivityHandoverCompletedEvent } from '../../shared/events/domainEvents';
 import type { EventBus } from '../../shared/events/eventBus';
 import type { AuthUser } from '../../shared/http/auth';
 import { newId, nowIso } from '../../shared/id';
@@ -9,6 +10,7 @@ import {
   type CreateProjectInput,
   type MemberStaff,
   type Project,
+  type ProgrammeHandover,
   type ProjectFilter,
   type ProjectMember,
   type ProjectMemberView,
@@ -198,6 +200,41 @@ export class ProgrammesService {
       occurredAt: timestamp,
     });
     return updated;
+  }
+
+  /** Handover history of a programme the caller's store is enrolled in, oldest first. */
+  async listHandovers(id: string, caller: AuthUser): Promise<ProgrammeHandover[]> {
+    const programme = await this.getProgramme(id);
+    // Don't reveal programmes that belong to other stores.
+    if (!programme.enrolledStoreIds.includes(caller.storeId)) throw new NotFoundError('Programme', id);
+    return this.repository.listHandovers(programme.id);
+  }
+
+  /**
+   * Records each programme slice of a shift handover. Only appends history: programme status,
+   * members and enrolments are untouched. Unknown programme ids are skipped (event path, not a request).
+   */
+  async recordHandover(event: ActivityHandoverCompletedEvent): Promise<ProgrammeHandover[]> {
+    const recorded: ProgrammeHandover[] = [];
+    for (const group of event.programmes) {
+      const programme = await this.repository.findById(group.programmeId);
+      if (!programme) continue;
+      recorded.push(
+        await this.repository.appendHandover({
+          batchId: event.batchId,
+          programmeId: programme.id,
+          storeId: group.storeId,
+          closedCount: group.closedCount,
+          blockedCount: group.blockedCount,
+          activityIds: [...group.activityIds],
+          completedBy: event.completedBy,
+          completedByName: event.completedByName,
+          ...(event.note !== undefined ? { note: event.note } : {}),
+          occurredAt: event.occurredAt,
+        }),
+      );
+    }
+    return recorded;
   }
 
   private async getProgramme(id: string): Promise<Project> {

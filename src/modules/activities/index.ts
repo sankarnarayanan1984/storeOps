@@ -1,7 +1,7 @@
 import type { Router } from 'express';
 import type { EventBus } from '../../shared/events/eventBus';
 import type { StaffReader } from '../staff/staff.reader';
-import { InMemoryActivitiesRepository } from './activities.repository';
+import { InMemoryActivitiesRepository, InMemoryActivityAuditRepository } from './activities.repository';
 import { createActivitiesRouter } from './activities.routes';
 import { activitiesSeed } from './activities.seed';
 import { ActivitiesService } from './activities.service';
@@ -18,6 +18,7 @@ export function createActivitiesModule(deps: ActivitiesModuleDeps): { router: Ro
     new InMemoryActivitiesRepository(deps.seed ?? activitiesSeed),
     deps.staff,
     deps.eventBus,
+    new InMemoryActivityAuditRepository(),
   );
   return { router: createActivitiesRouter(service, (token) => deps.staff.authenticate(token)) };
 }

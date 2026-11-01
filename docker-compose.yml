@@ -2,8 +2,11 @@ services:
   storeops:
     build: .
     image: storeops-api:local
+    container_name: storeops-api
     ports:
       - "3000:3000"
     environment:
+      NODE_ENV: production
       PORT: "3000"
+    # The image defines a HEALTHCHECK on GET /api/tasks; `docker compose ps` shows "healthy".
     restart: unless-stopped
